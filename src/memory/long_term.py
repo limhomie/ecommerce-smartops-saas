@@ -23,8 +23,9 @@ COLLECTION_WIKI = "enterprise_wiki"
 class LongTermMemory:
     """Long-term knowledge base using ChromaDB collections."""
 
-    def __init__(self, vector_store: VectorStore):
+    def __init__(self, vector_store: VectorStore, user_id: str = ""):
         self.store = vector_store
+        self.user_id = user_id
 
     # ── Document ingestion ──
 
@@ -36,7 +37,7 @@ class LongTermMemory:
         if not chunks:
             return 0
         metadatas = [metadata or {}] * len(chunks)
-        self.store.add_documents(collection_name, chunks, metadatas)
+        self.store.add_documents(collection_name, chunks, metadatas, user_id=self.user_id)
         return len(chunks)
 
     def ingest_file(self, collection_name: str, file_path: str | Path) -> int:
@@ -80,19 +81,23 @@ class LongTermMemory:
                        above this are excluded. Defaults to MAX_RELEVANCE_DISTANCE.
         """
         threshold = threshold if threshold is not None else self.MAX_RELEVANCE_DISTANCE
-        docs = self.store.search(collection_name, query, top_k=top_k)
+        docs = self.store.search(
+            collection_name, query, top_k=top_k, user_id=self.user_id
+        )
         return [d for d in docs if d.get("distance", 0) <= threshold]
 
     def search_all(self, query: str, top_k: int = 5) -> list[dict]:
-        """Search across all collections, globally ranked by relevance.
+        """Search across all collections with diverse sampling.
 
-        Returns the top_k most relevant docs regardless of collection.
+        Each collection contributes its top-2 matches. Results are merged
+        and ranked globally. This prevents one large collection (e.g. FAQ)
+        from dominating the results.
         """
-        all_docs = []
-        for coll in self.store.list_collections():
-            docs = self.search(coll, query, top_k=10)  # Fetch more per coll
+        per_coll = 3
+        all_docs: list[dict] = []
+        for coll in self.store.list_collections(user_id=self.user_id):
+            docs = self.search(coll, query, top_k=per_coll)
             all_docs.extend(docs)
-        # Sort by relevance (lower distance = better)
         all_docs.sort(key=lambda d: d.get("distance", 999))
         return all_docs[:top_k]
 
@@ -111,7 +116,9 @@ class LongTermMemory:
     def delete_document(self, collection_name: str, doc_id: str) -> bool:
         """Delete a document by ID. Returns True if successful."""
         try:
-            collection = self.store.get_or_create_collection(collection_name)
+            collection = self.store.get_or_create_collection(
+                collection_name, user_id=self.user_id
+            )
             collection.delete(ids=[doc_id])
             return True
         except Exception:
@@ -120,8 +127,8 @@ class LongTermMemory:
     def get_stats(self) -> dict:
         """Return document counts per collection."""
         return {
-            name: self.store.count(name)
-            for name in self.store.list_collections()
+            name: self.store.count(name, user_id=self.user_id)
+            for name in self.store.list_collections(user_id=self.user_id)
         }
 
     # ── Internal chunking ──

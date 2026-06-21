@@ -47,3 +47,4 @@ class AgentState(TypedDict):
     step_count: int
     error: str
     next_agent: str
+    cache_hit: bool

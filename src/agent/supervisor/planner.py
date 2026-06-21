@@ -64,10 +64,14 @@ FALLBACK_PLANS: dict[str, list[dict]] = {
 }
 
 
-def plan_task(state: AgentState, llm=None) -> dict:
+def plan_task(state: AgentState, llm=None, extra_context: str = "") -> dict:
     """Decompose the user's task description into subtasks.
 
     Uses LLM if available, otherwise falls back to keyword matching.
+
+    Args:
+        extra_context: Optional conversation history to inject into the prompt,
+                       so the planner understands follow-up questions.
     """
     task = state.get("task_description", "")
     if not task:
@@ -83,16 +87,28 @@ def plan_task(state: AgentState, llm=None) -> dict:
     # Try LLM-based planning
     if llm and hasattr(llm, "invoke"):
         try:
-            response = llm.invoke(f"{SYSTEM_PROMPT}\n\n用户指令：{task}")
+            prompt = SYSTEM_PROMPT
+            if extra_context:
+                prompt += (
+                    "\n\n## 对话历史（用于理解当前问题的上下文）\n"
+                    f"{extra_context}\n"
+                    "如果当前问题是对上文的理解或跟进（如'那竞品呢？''再详细一点'），"
+                    "请结合历史对话推断用户意图，拆解为正确的子任务。\n"
+                )
+            prompt += f"\n\n用户指令：{task}"
+            response = llm.invoke(prompt)
             content = response.content if hasattr(response, "content") else str(response)
+            # Robust JSON extraction: find the first '[' and last ']'
             content = content.strip()
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1].rsplit("\n", 1)[0]
+            start = content.find("[")
+            end = content.rfind("]")
+            if start != -1 and end > start:
+                content = content[start:end + 1]
             subtasks = json.loads(content)
             logger.info("llm_planning_success", steps=len(subtasks))
             return {"subtasks": subtasks, "current_task_index": 0, "task_description": task}
-        except Exception as e:
-            logger.warning("llm_planning_failed", error=str(e))
+        except Exception:
+            logger.warning("llm_planning_failed", exc_info=True)
 
     # Fallback: keyword matching
     for keyword, plan in FALLBACK_PLANS.items():

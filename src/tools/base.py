@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -70,15 +70,14 @@ def create_default_registry() -> ToolRegistry:
     """Create a registry with all available tools registered."""
     registry = ToolRegistry()
 
-    from src.tools.google_shopping import GoogleShoppingTool
-    from src.tools.meta_ads import MetaAdsTool
-    from src.tools.shopify_api import ShopifyTool
     from src.tools.amazon_api import AmazonTool
     from src.tools.erp_api import ERPTool
-    from src.tools.logistics import LogisticsTool
-    from src.tools.runner import AutomationRunner
-
     from src.tools.google_ads_api import GoogleAdsTool
+    from src.tools.google_shopping import GoogleShoppingTool
+    from src.tools.logistics import LogisticsTool
+    from src.tools.meta_ads import MetaAdsTool
+    from src.tools.runner import AutomationRunner
+    from src.tools.shopify_api import ShopifyTool
 
     registry.register(GoogleShoppingTool())
     registry.register(MetaAdsTool())

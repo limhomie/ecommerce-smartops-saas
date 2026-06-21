@@ -24,13 +24,13 @@ class MemoryManager:
         self.window_size = window_size
 
     @classmethod
-    def create_default(cls) -> MemoryManager:
+    def create_default(cls, user_id: str = "") -> MemoryManager:
         """Create a MemoryManager with in-memory backend (no Redis/ChromaDB needed)."""
         backend = InMemoryBackend()
         short_term = ShortTermMemory(backend, window_size=5)
         from config.settings import Settings
         vector_store = VectorStore(Settings())
-        long_term = LongTermMemory(vector_store)
+        long_term = LongTermMemory(vector_store, user_id=user_id)
         return cls(short_term, long_term)
 
     async def remember(self, session_id: str, role: str, content: str) -> None:

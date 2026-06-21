@@ -25,6 +25,8 @@ async def chat(request: Request):
     body = await request.json()
     user_message = body.get("message", "")
     session_id = body.get("session_id", str(uuid.uuid4()))
+    user = getattr(request.state, "user", None)
+    user_id = user["id"] if user else "default"
 
     async def event_stream():
         try:
@@ -39,7 +41,7 @@ async def chat(request: Request):
 
             initial_state = {
                 "messages": [HumanMessage(content=user_message)],
-                "user_id": "default",
+                "user_id": user_id,
                 "session_id": session_id,
                 "task_description": user_message,
                 "subtasks": [],
@@ -54,6 +56,7 @@ async def chat(request: Request):
                 "charts": [],
                 "error": "",
                 "next_agent": "",
+                "cache_hit": False,
             }
 
             config = {"configurable": {"thread_id": session_id}, "recursion_limit": 12}
@@ -81,9 +84,9 @@ async def chat(request: Request):
 
             yield _sse("done", {"status": "complete", "session_id": session_id})
 
-        except Exception as e:
-            logger.error("chat_error", error=str(e))
-            yield _sse("error", {"error": str(e)})
+        except Exception as exc:
+            logger.exception("chat_error")
+            yield _sse("error", {"error": str(exc)})
 
     return StreamingResponse(
         event_stream(),

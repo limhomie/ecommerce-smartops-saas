@@ -119,4 +119,5 @@ def _invoke_llm(llm, prompt: str) -> str:
         response = llm.invoke(prompt)
         return response.content if hasattr(response, "content") else str(response)
     except Exception:
+        logger.warning("sentiment_llm_failed", exc_info=True)
         return "舆情数据已拉取，等待后续节点汇总。"

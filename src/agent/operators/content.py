@@ -92,5 +92,6 @@ def _invoke_llm(llm, prompt: str) -> str:
         response = llm.invoke(prompt)
         return response.content if hasattr(response, "content") else str(response)
     except Exception:
+        logger.warning("content_factory_llm_failed", exc_info=True)
         from src.llm.mock import MOCK_RESPONSES
         return MOCK_RESPONSES.get("content", "内容已生成。")

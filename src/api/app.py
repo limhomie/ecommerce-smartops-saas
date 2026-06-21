@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,20 +47,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         from redis.asyncio import Redis
 
-        from src.memory.short_term import RedisBackend, ShortTermMemory
         from src.memory.manager import MemoryManager
+        from src.memory.short_term import RedisBackend, ShortTermMemory
 
         app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
         await app.state.redis.ping()
         backend = RedisBackend(app.state.redis, tenant_id="default", ttl_seconds=3600)
         st_memory = ShortTermMemory(backend, window_size=settings.conversation_window_size)
 
-        from src.memory.vector_store import VectorStore
         from src.memory.long_term import LongTermMemory
+        from src.memory.vector_store import VectorStore
 
         vector_store = VectorStore(settings)
         lt_memory = LongTermMemory(vector_store)
-        app.state.memory_manager = MemoryManager(st_memory, lt_memory, settings.conversation_window_size)
+        app.state.memory_manager = MemoryManager(
+            st_memory, lt_memory, settings.conversation_window_size
+        )
         logger.info("redis_connected")
     except Exception as e:
         logger.warning("redis_unavailable", error=str(e))
@@ -79,7 +81,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def _ingest_seed_docs(app, settings, logger) -> None:
     """Ingest seed documents from data/documents/ into the knowledge base."""
-    from pathlib import Path
     from config.settings import ROOT_DIR
 
     docs_dir = ROOT_DIR / "data" / "documents" / "products"
@@ -124,25 +125,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Database
+    from src.db import Database
+    app.state.db = Database()
+    app.state.db.init()
+
+    # Auth
+    from src.auth.middleware import AuthMiddleware
+    from src.auth.user_service import UserService
+
+    user_service = UserService(app.state.db)
+    app.add_middleware(AuthMiddleware, db=app.state.db, user_service=user_service)
+    app.state.user_service = user_service
+
     # Observability
     from src.observability.middleware import ObservabilityMiddleware
-
     app.add_middleware(ObservabilityMiddleware)
-
-    # Security
-    from src.api.middleware import SecurityMiddleware
-
-    app.add_middleware(SecurityMiddleware)
 
     # Exception handlers
     from src.api.exceptions import register_exception_handlers
-
     register_exception_handlers(app)
 
     # Routers
-    from src.api.routers import health, chat, agent, knowledge, analytics
+    from src.api.routers import agent, analytics, chat, health, knowledge, sessions, users
 
     app.include_router(health.router, tags=["health"])
+    app.include_router(users.router, tags=["users"])
+    app.include_router(sessions.router, tags=["sessions"])
     app.include_router(chat.router, tags=["chat"])
     app.include_router(agent.router, tags=["agent"])
     app.include_router(knowledge.router, tags=["knowledge"])

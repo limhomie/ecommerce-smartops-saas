@@ -74,17 +74,31 @@ def _format_subtasks(subtasks: list[dict]) -> str:
 
 
 def _extract_action_items(report: str) -> list[str]:
-    """Simple extraction of action items from report."""
+    """Extract action items from report. Tries section headers first,
+    then falls back to finding any numbered/bulleted lines."""
     items = []
     in_actions = False
+    action_headers = ("行动建议", "改进方案", "行动清单", "跟进计划")
     for line in report.split("\n"):
-        if "行动建议" in line or "改进方案" in line:
+        if any(h in line for h in action_headers):
             in_actions = True
             continue
         if in_actions and line.startswith("##"):
             break
-        if in_actions and line.strip().startswith(("- ", "* ", "1.", "2.", "3.")):
-            items.append(line.strip().lstrip("- *").strip())
+        if in_actions and line.strip() and (
+            line.strip()[0].isdigit()
+            or line.strip().startswith(("- ", "* ", "• "))
+        ):
+            items.append(line.strip().lstrip("0123456789. -•*").strip())
+    if items:
+        return items
+    # Fallback: scan entire report for numbered items with action-like content
+    for line in report.split("\n"):
+        s = line.strip()
+        if s and len(s) > 10 and (s[0].isdigit() or s.startswith("- ") or s.startswith("* ")):
+            items.append(s.lstrip("0123456789. -•*").strip()[:120])
+        if len(items) >= 5:
+            break
     return items if items else ["查看完整报告获取行动建议"]
 
 
@@ -98,5 +112,6 @@ def _invoke_llm(llm, prompt: str) -> str:
         response = llm.invoke(prompt)
         return response.content if hasattr(response, "content") else str(response)
     except Exception:
+        logger.warning("report_generator_llm_failed", exc_info=True)
         from src.llm.mock import MOCK_RESPONSES
         return MOCK_RESPONSES.get("report", "报告已生成。")

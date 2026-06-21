@@ -58,18 +58,29 @@ class VectorStore:
             )
         return self._embedding_fn
 
-    def get_or_create_collection(self, name: str) -> chromadb.Collection:
+    @staticmethod
+    def _resolve_name(name: str, user_id: str) -> str:
+        return f"user_{user_id}_{name}" if user_id else name
+
+    def get_or_create_collection(
+        self, name: str, user_id: str = ""
+    ) -> chromadb.Collection:
+        resolved = self._resolve_name(name, user_id)
         embed_fn = self._get_embedding_fn()
         return self._client.get_or_create_collection(
-            name=name, embedding_function=embed_fn
+            name=resolved, embedding_function=embed_fn
         )
 
-    def list_collections(self) -> list[str]:
-        return [c.name for c in self._client.list_collections()]
+    def list_collections(self, user_id: str = "") -> list[str]:
+        all_names = [c.name for c in self._client.list_collections()]
+        if not user_id:
+            return all_names
+        prefix = f"user_{user_id}_"
+        return [n[len(prefix) :] for n in all_names if n.startswith(prefix)]
 
-    def delete_collection(self, name: str) -> None:
+    def delete_collection(self, name: str, user_id: str = "") -> None:
         try:
-            self._client.delete_collection(name)
+            self._client.delete_collection(self._resolve_name(name, user_id))
             logger.info("collection_deleted", name=name)
         except Exception:
             pass
@@ -80,10 +91,11 @@ class VectorStore:
         documents: list[str],
         metadatas: list[dict] | None = None,
         ids: list[str] | None = None,
+        user_id: str = "",
     ) -> None:
         if not documents:
             return
-        collection = self.get_or_create_collection(collection_name)
+        collection = self.get_or_create_collection(collection_name, user_id=user_id)
         if ids is None:
             import hashlib
             ids = []
@@ -102,8 +114,9 @@ class VectorStore:
         collection_name: str,
         query: str,
         top_k: int = 5,
+        user_id: str = "",
     ) -> list[dict]:
-        collection = self.get_or_create_collection(collection_name)
+        collection = self.get_or_create_collection(collection_name, user_id=user_id)
         results = collection.query(query_texts=[query], n_results=top_k)
         docs = []
         for i in range(len(results["documents"][0])):
@@ -116,9 +129,9 @@ class VectorStore:
             })
         return docs
 
-    def count(self, collection_name: str) -> int:
+    def count(self, collection_name: str, user_id: str = "") -> int:
         try:
-            collection = self.get_or_create_collection(collection_name)
+            collection = self.get_or_create_collection(collection_name, user_id=user_id)
             return collection.count()
         except Exception:
             return 0

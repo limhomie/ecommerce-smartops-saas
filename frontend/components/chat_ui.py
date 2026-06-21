@@ -60,19 +60,33 @@ def render_chat(api_url: str):
     sid = st.session_state.session_id
     task = _task_read(sid)
 
-    # ── History ──
-    for msg in st.session_state.messages:
+    # ── History (with scroll anchors on user messages) ──
+    user_anchors: list[tuple[str, str]] = []  # (anchor_id, preview_text)
+    for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
+            if msg["role"] == "user":
+                anchor = f"chat_msg_{i}"
+                st.markdown(
+                    f'<div id="{anchor}" style="scroll-margin-top:80px;height:0"></div>',
+                    unsafe_allow_html=True,
+                )
+                preview = msg["content"][:35] + ("…" if len(msg["content"]) > 35 else "")
+                user_anchors.append((anchor, preview))
             st.markdown(msg["content"])
             if msg.get("charts"):
                 cols = st.columns(min(len(msg["charts"]), 2))
-                for i, cs in enumerate(msg["charts"]):
-                    with cols[i % 2]:
+                for ci, cs in enumerate(msg["charts"]):
+                    with cols[ci % 2]:
                         try:
                             st.plotly_chart(cs, use_container_width=True,
-                                          key=f"h_{i}_{abs(hash(msg['content']))}")
+                                          key=f"h_{i}_{ci}_{abs(hash(msg['content']))%100000}")
                         except Exception:
                             pass
+
+    # ── Auto-scroll to bottom + hover context panel ──
+    _inject_scroll_to_bottom()
+    if user_anchors:
+        _render_context_panel(user_anchors)
 
     # ── Running? ──
     if task.get("status") == "running":
@@ -180,6 +194,7 @@ def _run_agent(user_input: str, sid: str):
             "tool_results": {}, "generated_content": "",
             "final_report": "", "action_items": [],
             "step_count": 0, "charts": [], "error": "", "next_agent": "",
+            "cache_hit": False,
         }
         cfg = {"configurable": {"thread_id": sid}, "recursion_limit": 12}
 
@@ -190,9 +205,10 @@ def _run_agent(user_input: str, sid: str):
             for node_name, node_out in event.items():
                 label = _nl(node_name, node_out)
                 log(f"[{time.time()-t0:.0f}s] {label}")
-                if "charts" in node_out:
+                if node_out and "charts" in node_out:
                     all_charts.extend(node_out["charts"])
-                final.update(node_out)
+                if node_out:
+                    final.update(node_out)
 
         final["charts"] = all_charts
         final["_elapsed"] = f"{time.time()-t0:.0f}秒"
@@ -201,6 +217,118 @@ def _run_agent(user_input: str, sid: str):
     except Exception as e:
         import traceback
         _task_write(sid, status="error", error=f"{e}\n{traceback.format_exc()}")
+
+
+def _inject_scroll_to_bottom() -> None:
+    """Auto-scroll the chat viewport to the bottom on page load."""
+    st.markdown(
+        """
+        <script>
+        (function() {
+            const el = window.parent.document.querySelector(
+                '.stMain [data-testid="stVerticalBlock"]'
+            );
+            if (el) el.scrollTop = el.scrollHeight;
+            // Also try window scroll as fallback
+            setTimeout(function() {
+                window.scrollTo(0, document.body.scrollHeight);
+            }, 100);
+        })();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_context_panel(anchors: list[tuple[str, str]]) -> None:
+    """Right-side floating panel — collapsed bar, expands on hover with
+    clickable user-question shortcuts that jump to the corresponding
+    message anchor.
+    """
+    items_html = ""
+    for anchor_id, preview in anchors:
+        safe_preview = preview.replace("'", "\\'").replace('"', "&quot;")
+        items_html += (
+            f'<a class="ctx-item" href="#{anchor_id}" '
+            f'title="{safe_preview}">{preview}</a>'
+        )
+
+    st.markdown(
+        f"""
+        <style>
+        html {{ scroll-behavior: smooth; }}
+        .ctx-panel {{
+            position: fixed;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            max-height: 60vh;
+            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px 0 0 4px;
+            transition: width 0.25s ease, padding 0.25s ease, box-shadow 0.25s ease;
+            overflow: hidden;
+            z-index: 9999;
+            cursor: pointer;
+        }}
+        .ctx-panel:hover {{
+            width: 220px;
+            padding: 10px 12px;
+            background: #ffffff;
+            box-shadow: -4px 0 20px rgba(0,0,0,0.12);
+            border: 1px solid #e8e8e8;
+            border-right: none;
+            overflow-y: auto;
+        }}
+        .ctx-panel::before {{
+            content: "◀";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 10px;
+            transition: opacity 0.15s ease;
+        }}
+        .ctx-panel:hover::before {{
+            opacity: 0;
+        }}
+        .ctx-item {{
+            display: block;
+            padding: 7px 10px;
+            font-size: 13px;
+            color: #333 !important;
+            text-decoration: none !important;
+            cursor: pointer;
+            border-radius: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: background 0.15s;
+        }}
+        .ctx-item:hover {{
+            background: #f0f2ff;
+            color: #1a1a1a;
+        }}
+        .ctx-panel:hover .ctx-header {{
+            display: block;
+        }}
+        .ctx-header {{
+            display: none;
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #eee;
+        }}
+        </style>
+        <div class="ctx-panel">
+            <div class="ctx-header">📋 对话上下文</div>
+            {items_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _nl(node_name: str, _output: dict) -> str:
@@ -213,4 +341,6 @@ def _nl(node_name: str, _output: dict) -> str:
         "content_factory": "生成产品文案和广告素材",
         "sop_executor": "执行自动化流程",
         "report_generator": "汇总生成分析报告",
+        "check_cache": "查询缓存",
+        "write_cache": "写入缓存",
     }.get(node_name, f"执行: {node_name}")

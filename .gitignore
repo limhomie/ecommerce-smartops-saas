@@ -31,3 +31,14 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Code intelligence
+.codegraph/
+
+# Runtime data
+data/ecommerce.db
+data/agent_cache.json
+
+# Node
+node_modules/
+frontend_react/dist/
