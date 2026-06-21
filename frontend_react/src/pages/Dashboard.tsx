@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
-import { Card, Row, Col, Select, Button, Typography, DatePicker } from 'antd'
+import { useState, useMemo, useEffect } from 'react'
+import { Card, Row, Col, Select, Button, Typography, DatePicker, Statistic } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import { LineChart, Line, PieChart, Pie, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 import dayjs, { type Dayjs } from 'dayjs'
+import client from '../api/client'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -94,6 +95,13 @@ export default function Dashboard() {
   }, [period, dates, today])
 
   const d = useMemo(() => periodData(period, dates?.[0], dates?.[1]), [period, dates, key])
+  const [stats, setStats] = useState<Record<string, number> | null>(null)
+
+  useEffect(() => {
+    client.get('/users/me').then(({ data }) => {
+      setStats(data.stats || null)
+    }).catch(() => {})
+  }, [])
 
   const diff = (v: number, prev: number) => {
     const pct = ((v - prev) / prev * 100).toFixed(1)
@@ -143,6 +151,14 @@ export default function Dashboard() {
         <Col xs={12} sm={6}><Card style={cardStyle}><div style={{ color: '#999', fontSize: 12 }}>客单价</div><div style={{ fontSize: 28, fontWeight: 700 }}>${d.aov.toFixed(2)}</div></Card></Col>
         <Col xs={12} sm={6}><Card style={cardStyle}><div style={{ color: '#999', fontSize: 12 }}>访客数</div><div style={{ fontSize: 28, fontWeight: 700 }}>{d.visitors.toLocaleString()}</div></Card></Col>
       </Row>
+
+      {stats && (
+        <Row gutter={[16, 12]} style={{ marginBottom: 24 }}>
+          <Col xs={12} sm={6}><Card size="small"><Statistic title="本月查询" value={stats.total_tasks || 0} suffix="次" /></Card></Col>
+          <Col xs={12} sm={6}><Card size="small"><Statistic title="会话数" value={stats.total_sessions || 0} suffix="个" /></Card></Col>
+          <Col xs={12} sm={6}><Card size="small"><Statistic title="平均响应" value={stats.avg_elapsed_ms || 0} suffix="ms" precision={0} /></Card></Col>
+        </Row>
+      )}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>

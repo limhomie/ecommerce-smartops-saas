@@ -147,10 +147,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
 
     # Routers
-    from src.api.routers import agent, analytics, chat, health, knowledge, sessions, users
+    from src.api.routers import admin, agent, analytics, chat, health, knowledge, sessions, users
 
     app.include_router(health.router, tags=["health"])
     app.include_router(users.router, tags=["users"])
+    app.include_router(admin.router, tags=["admin"])
     app.include_router(sessions.router, tags=["sessions"])
     app.include_router(chat.router, tags=["chat"])
     app.include_router(agent.router, tags=["agent"])

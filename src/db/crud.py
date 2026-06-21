@@ -167,6 +167,31 @@ class Database:
             "avg_elapsed_ms": round(row["avg_elapsed_ms"], 1),
         }
 
+    def disable_user(self, user_id: str) -> bool:
+        """Disable a user by removing their API key."""
+        with self._lock:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+                return conn.total_changes > 0
+
+    def get_system_stats(self) -> dict:
+        """System-wide usage statistics."""
+        with self._connect() as conn:
+            user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            task_count = conn.execute("SELECT COUNT(*) FROM task_history").fetchone()[0]
+            avg_ms = conn.execute(
+                "SELECT COALESCE(AVG(elapsed_ms), 0) FROM task_history"
+            ).fetchone()[0]
+            today = conn.execute(
+                "SELECT COUNT(*) FROM task_history WHERE date(created_at) = date('now')"
+            ).fetchone()[0]
+        return {
+            "total_users": user_count,
+            "total_tasks": task_count,
+            "avg_elapsed_ms": round(avg_ms, 1),
+            "tasks_today": today,
+        }
+
     # ── Internal ──
 
     def _connect(self) -> sqlite3.Connection:
