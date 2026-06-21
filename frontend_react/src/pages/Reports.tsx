@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm'
 import { LineChart, Line, PieChart, Pie, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 import type { Dayjs } from 'dayjs'
 import client from '../api/client'
+import { uid } from '../utils/uid'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -75,7 +76,7 @@ export default function Reports() {
   const generate = async () => {
     setLoading(true); setReport('')
     try {
-      const sid = crypto.randomUUID()
+      const sid = uid()
       const range = dates ? `${dates[0].format('MM/DD')}-${dates[1].format('MM/DD')}` : period
       const { data: taskRes } = await client.post('/agent/tasks', { task: `生成${reportType}，时间范围：${range}`, session_id: sid })
       const poll = async (): Promise<void> => {

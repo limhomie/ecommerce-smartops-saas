@@ -9,6 +9,7 @@ import client from '../api/client'
 import ContextPanel from '../components/ContextPanel'
 import { useBackgroundTask } from '../hooks/useBackgroundTask'
 import { usePersistentMessages } from '../hooks/usePersistentMessages'
+import { uid } from '../utils/uid'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -20,7 +21,7 @@ const PRESETS = [
 
 export default function Chat() {
   const { id } = useParams<{ id: string }>()
-  const [_sessionId] = useState(id || localStorage.getItem('chat_session') || crypto.randomUUID())
+  const [_sessionId] = useState(id || localStorage.getItem('chat_session') || uid())
   const sessionId = _sessionId
   const { messages, addMessage, updateLastAssistant } = usePersistentMessages(sessionId)
   const { status, result, progress, startTask } = useBackgroundTask(`chat_${sessionId}`)
