@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react'
 import { Card, Row, Col, Select, Button, Typography, DatePicker } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
-import { Line, Pie, Funnel, Bar, Gauge } from '@ant-design/charts'
+import { LineChart, Line, PieChart, Pie, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 import dayjs, { type Dayjs } from 'dayjs'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
+
+const COLORS = ['#5B8FF9', '#5AD8A6', '#F6BD16', '#E8684A', '#6DC8EC']
 
 type Period = '本周' | '上周' | '本月' | '上月' | '自定义'
 
@@ -74,6 +76,8 @@ function periodData(p: Period, start?: Dayjs, end?: Dayjs): Metrics {
   }
 }
 
+const cardStyle = { textAlign: 'center' as const }
+
 export default function Dashboard() {
   const [period, setPeriod] = useState<Period>('本周')
   const [dates, setDates] = useState<[Dayjs, Dayjs] | null>(null)
@@ -82,15 +86,9 @@ export default function Dashboard() {
 
   const displayLabel = useMemo(() => {
     if (period === '本周') return `${today.startOf('week').format('MM/DD')} — ${today.format('MM/DD')}`
-    if (period === '上周') {
-      const last = today.subtract(1, 'week')
-      return `${last.startOf('week').format('MM/DD')} — ${last.endOf('week').format('MM/DD')}`
-    }
+    if (period === '上周') { const last = today.subtract(1, 'week'); return `${last.startOf('week').format('MM/DD')} — ${last.endOf('week').format('MM/DD')}` }
     if (period === '本月') return `${today.startOf('month').format('MM/DD')} — ${today.format('MM/DD')}`
-    if (period === '上月') {
-      const lm = today.subtract(1, 'month')
-      return `${lm.startOf('month').format('MM/DD')} — ${lm.endOf('month').format('MM/DD')}`
-    }
+    if (period === '上月') { const lm = today.subtract(1, 'month'); return `${lm.startOf('month').format('MM/DD')} — ${lm.endOf('month').format('MM/DD')}` }
     if (dates) return `${dates[0].format('MM/DD')} — ${dates[1].format('MM/DD')}`
     return ''
   }, [period, dates, today])
@@ -103,12 +101,28 @@ export default function Dashboard() {
     return <span style={{ color, fontSize: 12 }}>{v >= prev ? '↑' : '↓'}{pct}%</span>
   }
 
-  const cardStyle = { textAlign: 'center' as const }
   const trendData = d.trend_labels.flatMap((l, i) => [
     { day: l, value: d.trend_current[i], type: '本期' },
     { day: l, value: d.trend_prev[i], type: '上期' },
   ])
-  const gaugePercent = d.sent_pos / 100
+  const trafficData = [
+    { name: '自然搜索', value: d.traffic[0] },
+    { name: '付费广告', value: d.traffic[1] },
+    { name: '社交媒体', value: d.traffic[2] },
+    { name: '直接访问', value: d.traffic[3] },
+    { name: '邮件营销', value: d.traffic[4] },
+  ]
+  const funnelData = [
+    { stage: '访客', value: d.visitors }, { stage: '商品页', value: 15200 },
+    { stage: '加购', value: 3200 }, { stage: '结账', value: 1200 }, { stage: '下单', value: d.orders },
+  ]
+  const competitorData = [
+    { brand: '我方', price: d.aov }, { brand: '竞品A', price: 29.99 },
+    { brand: '竞品B', price: 34.99 }, { brand: '竞品C', price: 24.99 },
+  ]
+  const orderData = d.orders_daily.map((v, i) => ({ day: d.trend_labels[i], orders: v }))
+
+  const chartHeight = 280
 
   return (
     <div style={{ paddingBottom: 24 }}>
@@ -117,9 +131,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Select value={period} onChange={v => { setPeriod(v); setDates(null) }} style={{ width: 90 }}
             options={['本周','上周','本月','上月','自定义'].map(v => ({ value: v, label: v }))} />
-          {period === '自定义' && (
-            <RangePicker value={dates as [Dayjs, Dayjs]} onChange={v => setDates(v ? [v[0]!, v[1]!] : null)} style={{ width: 240 }} />
-          )}
+          {period === '自定义' && <RangePicker value={dates as [Dayjs, Dayjs]} onChange={v => setDates(v ? [v[0]!, v[1]!] : null)} style={{ width: 240 }} />}
           {(period !== '自定义' || dates) && <span style={{ color: '#999', fontSize: 12 }}>{displayLabel}</span>}
           <Button icon={<ReloadOutlined />} onClick={() => setKey(k => k + 1)} />
         </div>
@@ -133,24 +145,48 @@ export default function Dashboard() {
       </Row>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}><Card title="转化率趋势对比" size="small"><Line data={trendData} xField="day" yField="value" colorField="type" height={280} /></Card></Col>
-        <Col xs={24} lg={12}><Card title="流量来源分布" size="small"><Pie data={[
-          { type: '自然搜索', value: d.traffic[0] }, { type: '付费广告', value: d.traffic[1] },
-          { type: '社交媒体', value: d.traffic[2] }, { type: '直接访问', value: d.traffic[3] },
-          { type: '邮件营销', value: d.traffic[4] },
-        ]} angleField="value" colorField="type" innerRadius={0.4} height={280} /></Card></Col>
-        <Col xs={24} lg={12}><Card title="转化漏斗" size="small"><Funnel data={[
-          { stage: '访客', value: d.visitors }, { stage: '商品页', value: 15200 },
-          { stage: '加购', value: 3200 }, { stage: '结账', value: 1200 }, { stage: '下单', value: d.orders },
-        ]} xField="stage" yField="value" height={280} /></Card></Col>
-        <Col xs={24} lg={12}><Card title="竞品价格对比" size="small"><Bar data={[
-          { brand: '我方', price: d.aov }, { brand: '竞品A', price: 29.99 },
-          { brand: '竞品B', price: 34.99 }, { brand: '竞品C', price: 24.99 },
-        ]} xField="brand" yField="price" height={280} /></Card></Col>
-        <Col xs={24} lg={12}><Card title={`每日订单量 (共${d.orders}单)`} size="small"><Bar data={
-          d.orders_daily.map((v, i) => ({ day: d.trend_labels[i], orders: v }))
-        } xField="day" yField="orders" height={280} /></Card></Col>
-        <Col xs={24} lg={12}><Card title={`正面舆情占比 (${d.sent_pos}%)`} size="small"><Gauge percent={gaugePercent} height={280} /></Card></Col>
+        <Col xs={24} lg={12}>
+          <Card title="转化率趋势对比" size="small">
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <LineChart data={trendData}><XAxis dataKey="day" fontSize={12} /><YAxis fontSize={12} /><Tooltip /><Legend /><Line type="monotone" dataKey="value" stroke="#5B8FF9" name="本期" /><Line type="monotone" dataKey="value" stroke="#F6BD16" name="上期" /></LineChart>
+            </ResponsiveContainer>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="流量来源分布" size="small">
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <PieChart><Pie data={trafficData} dataKey="value" nameKey="name" outerRadius={100} label>{trafficData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /><Legend /></PieChart>
+            </ResponsiveContainer>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="竞品价格对比" size="small">
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <BarChart data={competitorData}><XAxis dataKey="brand" fontSize={12} /><YAxis fontSize={12} /><Tooltip /><Bar dataKey="price" fill="#5B8FF9" name="价格(USD)" /></BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title={`每日订单量 (共${d.orders}单)`} size="small">
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <BarChart data={orderData}><XAxis dataKey="day" fontSize={12} /><YAxis fontSize={12} /><Tooltip /><Bar dataKey="orders" fill="#5AD8A6" name="订单" /></BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="转化漏斗" size="small">
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <BarChart data={funnelData} layout="vertical"><XAxis type="number" fontSize={12} /><YAxis dataKey="stage" type="category" fontSize={12} /><Tooltip /><Bar dataKey="value" fill="#6DC8EC" name="人数" /></BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title={`正面舆情占比 (${d.sent_pos}%)`} size="small">
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <PieChart><Pie data={[{name:'正面',value:d.sent_pos},{name:'中性',value:d.sent_neu},{name:'负面',value:d.sent_neg}]} dataKey="value" innerRadius={60} outerRadius={100}>{[<Cell key={0} fill="#5AD8A6" />,<Cell key={1} fill="#F6BD16" />,<Cell key={2} fill="#E8684A" />]}</Pie><Tooltip /><Legend /></PieChart>
+            </ResponsiveContainer>
+          </Card>
+        </Col>
       </Row>
     </div>
   )

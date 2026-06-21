@@ -1,18 +1,18 @@
 import { useState } from 'react'
-import { Card, Select, Typography, Button, Space, Spin, Empty, Row, Col, DatePicker, Tag } from 'antd'
-import { FileTextOutlined, LoadingOutlined } from '@ant-design/icons'
+import { Card, Select, Typography, Button, Space, Spin, Empty, Row, Col, DatePicker } from 'antd'
+import { FileTextOutlined } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Line, Pie, Funnel, Bar, Gauge } from '@ant-design/charts'
+import { LineChart, Line, PieChart, Pie, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 import type { Dayjs } from 'dayjs'
 import client from '../api/client'
-import { useBackgroundTask, clearBackgroundTask } from '../hooks/useBackgroundTask'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
 const REPORT_TYPES = ['转化率诊断报告', '竞品分析报告', '广告效果报告', '舆情分析报告', '综合运营周报']
 const PERIODS = ['本周', '上周', '本月']
+const COLORS = ['#5B8FF9', '#5AD8A6', '#F6BD16', '#E8684A', '#6DC8EC']
 
 interface ReportData {
   conversion: number; prev_conversion: number; aov: number; orders: number
@@ -43,110 +43,109 @@ const PERIOD_DATA: Record<string, ReportData> = {
 
 const AD_DATA = { campaigns: ['夏季特惠','新品首发','品牌种草','会员日','清仓'], roas: [3.2,2.8,2.1,2.5,1.6] }
 
-const TASK_KEY = 'report_generator'
-
 export default function Reports() {
   const [reportType, setReportType] = useState(REPORT_TYPES[0])
   const [period, setPeriod] = useState(PERIODS[0])
   const [dates, setDates] = useState<[Dayjs, Dayjs] | null>(null)
-
-  const { status, result, startTask, clear } = useBackgroundTask(TASK_KEY)
-  const loading = status === 'running'
-  const report = (result?.report as string) || ''
-  const actions = (result?.action_items as string[]) || []
+  const [loading, setLoading] = useState(false)
+  const [report, setReport] = useState('')
+  const [actions, setActions] = useState<string[]>([])
 
   const chartHeight = 260
   const d = PERIOD_DATA[period] || PERIOD_DATA['本周']
+
   const trendData = d.trend_labels.flatMap((l, i) => [
     { day: l, value: d.trend_current[i], type: '本期' },
     { day: l, value: d.trend_prev[i], type: '上期' },
   ])
+  const trafficData = [
+    { name: '自然搜索', value: d.traffic[0] }, { name: '付费广告', value: d.traffic[1] },
+    { name: '社交媒体', value: d.traffic[2] }, { name: '直接访问', value: d.traffic[3] }, { name: '邮件营销', value: d.traffic[4] },
+  ]
+  const funnelData = [
+    { stage: '访客', value: d.visitors }, { stage: '商品页', value: 15200 },
+    { stage: '加购', value: 3200 }, { stage: '结账', value: 1200 }, { stage: '下单', value: d.orders },
+  ]
+  const competitorData = [
+    { brand: '我方', price: d.aov }, { brand: '竞品A', price: 29.99 },
+    { brand: '竞品B', price: 34.99 }, { brand: '竞品C', price: 24.99 },
+  ]
+  const adData = AD_DATA.campaigns.map((c, i) => ({ campaign: c, roas: AD_DATA.roas[i] }))
 
   const generate = async () => {
-    const range = dates ? `${dates[0].format('MM/DD')}-${dates[1].format('MM/DD')}` : period
-    try { await client.post('/sessions', { title: `${reportType} ${range}` }) } catch { /* ok */ }
-    startTask(`生成${reportType}，时间范围：${range}`)
+    setLoading(true); setReport('')
+    try {
+      const sid = crypto.randomUUID()
+      const range = dates ? `${dates[0].format('MM/DD')}-${dates[1].format('MM/DD')}` : period
+      const { data: taskRes } = await client.post('/agent/tasks', { task: `生成${reportType}，时间范围：${range}`, session_id: sid })
+      const poll = async (): Promise<void> => {
+        const { data } = await client.get(`/agent/tasks/${taskRes.task_id}`)
+        if (data.status === 'completed') { setReport(data.result?.report || ''); setActions(data.result?.action_items || []); return }
+        if (data.status === 'failed') throw new Error(data.error)
+        await new Promise(r => setTimeout(r, 1500))
+        return poll()
+      }
+      await poll()
+    } catch { setReport('报告生成失败，请重试') }
+    finally { setLoading(false) }
   }
-
-  const handleClear = () => { clear(); clearBackgroundTask(TASK_KEY) }
 
   const isConversion = reportType === '转化率诊断报告'
   const isCompetitor = reportType === '竞品分析报告'
   const isAd = reportType === '广告效果报告'
   const isSentiment = reportType === '舆情分析报告'
   const isWeekly = reportType === '综合运营周报'
+  const showConversion = isConversion || isWeekly
+  const showCompetitor = isCompetitor || isWeekly
+  const showAd = isAd || isWeekly
+  const showSentiment = isSentiment || isWeekly
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4}>分析报告</Title>
-        {loading && <Tag color="processing" icon={<LoadingOutlined />}>后台生成中</Tag>}
-      </div>
-
+      <Title level={4}>分析报告</Title>
       <Card style={{ marginBottom: 24 }}>
         <Space wrap>
-          <Select value={reportType} onChange={v => { setReportType(v); handleClear() }} style={{ width: 180 }}
+          <Select value={reportType} onChange={v => { setReportType(v); setReport(''); setActions([]) }} style={{ width: 180 }}
             options={REPORT_TYPES.map(v => ({ value: v, label: v }))} />
           <Select value={period} onChange={v => { setPeriod(v); setDates(null) }} style={{ width: 100 }}
             options={[...PERIODS, '自定义'].map(v => ({ value: v, label: v }))} />
-          {period === '自定义' && (
-            <RangePicker value={dates as [Dayjs, Dayjs]} onChange={v => setDates(v ? [v[0]!, v[1]!] : null)} style={{ width: 240 }} />
-          )}
+          {period === '自定义' && <RangePicker value={dates as [Dayjs, Dayjs]} onChange={v => setDates(v ? [v[0]!, v[1]!] : null)} style={{ width: 240 }} />}
           <Button type="primary" loading={loading} icon={<FileTextOutlined />} onClick={generate}>生成报告</Button>
-          {status === 'done' && <Button size="small" onClick={handleClear}>重新生成</Button>}
         </Space>
       </Card>
-
-      {loading && <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /><div style={{ marginTop: 16 }}><Text type="secondary">AI 正在撰写报告... 可切换页面，不会中断。</Text></div></div>}
+      {loading && <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /><div style={{ marginTop: 16 }}><Text type="secondary">AI 正在撰写报告并生成图表...</Text></div></div>}
       {!loading && !report && <Empty description="选择报告类型和时间范围，点击生成" />}
-
       {report && !loading && (
         <div>
-          {(isConversion || isWeekly) && (
+          {showConversion && (
             <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-              <Col xs={24} lg={12}><Card size="small" title="转化率趋势"><Line data={trendData} xField="day" yField="value" colorField="type" height={chartHeight} /></Card></Col>
-              <Col xs={24} lg={12}><Card size="small" title="转化漏斗"><Funnel data={[
-                { stage: '访客', value: d.visitors }, { stage: '商品页', value: 15200 },
-                { stage: '加购', value: 3200 }, { stage: '结账', value: 1200 }, { stage: '下单', value: d.orders },
-              ]} xField="stage" yField="value" height={chartHeight} /></Card></Col>
-              <Col xs={24} lg={12}><Card size="small" title="流量来源"><Pie data={[
-                { type: '自然搜索', value: d.traffic[0] }, { type: '付费广告', value: d.traffic[1] },
-                { type: '社交媒体', value: d.traffic[2] }, { type: '直接访问', value: d.traffic[3] },
-                { type: '邮件营销', value: d.traffic[4] },
-              ]} angleField="value" colorField="type" innerRadius={0.4} height={chartHeight} /></Card></Col>
-              <Col xs={24} lg={12}><Card size="small" title="每日订单"><Bar data={d.orders_daily.map((v, i) => ({ day: d.trend_labels[i], orders: v }))} xField="day" yField="orders" height={chartHeight} /></Card></Col>
+              <Col xs={24} lg={12}><Card size="small" title="转化率趋势"><ResponsiveContainer width="100%" height={chartHeight}><LineChart data={trendData}><XAxis dataKey="day" fontSize={12} /><YAxis fontSize={12} /><Tooltip /><Legend /><Line type="monotone" dataKey="value" stroke="#5B8FF9" name="本期" /><Line type="monotone" dataKey="value" stroke="#F6BD16" name="上期" /></LineChart></ResponsiveContainer></Card></Col>
+              <Col xs={24} lg={12}><Card size="small" title="转化漏斗"><ResponsiveContainer width="100%" height={chartHeight}><BarChart data={funnelData} layout="vertical"><XAxis type="number" fontSize={12} /><YAxis dataKey="stage" type="category" fontSize={12} /><Tooltip /><Bar dataKey="value" fill="#6DC8EC" /></BarChart></ResponsiveContainer></Card></Col>
+              <Col xs={24} lg={12}><Card size="small" title="流量来源"><ResponsiveContainer width="100%" height={chartHeight}><PieChart><Pie data={trafficData} dataKey="value" nameKey="name" outerRadius={100} label>{trafficData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer></Card></Col>
+              <Col xs={24} lg={12}><Card size="small" title="每日订单"><ResponsiveContainer width="100%" height={chartHeight}><BarChart data={d.orders_daily.map((v, i) => ({ day: d.trend_labels[i], orders: v }))}><XAxis dataKey="day" fontSize={12} /><YAxis fontSize={12} /><Tooltip /><Bar dataKey="orders" fill="#5AD8A6" /></BarChart></ResponsiveContainer></Card></Col>
             </Row>
           )}
-          {(isCompetitor || isWeekly) && (
+          {showCompetitor && (
             <Card size="small" title="竞品价格对比" style={{ marginBottom: 16 }}>
-              <Bar data={[{ brand: '我方', price: d.aov }, { brand: '竞品A', price: 29.99 }, { brand: '竞品B', price: 34.99 }, { brand: '竞品C', price: 24.99 }]} xField="brand" yField="price" height={chartHeight} />
+              <ResponsiveContainer width="100%" height={chartHeight}><BarChart data={competitorData}><XAxis dataKey="brand" fontSize={12} /><YAxis fontSize={12} /><Tooltip /><Bar dataKey="price" fill="#5B8FF9" /></BarChart></ResponsiveContainer>
             </Card>
           )}
-          {(isAd || isWeekly) && (
+          {showAd && (
             <Card size="small" title="广告系列 ROAS 对比" style={{ marginBottom: 16 }}>
-              <Bar data={AD_DATA.campaigns.map((c, i) => ({ campaign: c, roas: AD_DATA.roas[i] }))} xField="campaign" yField="roas" height={chartHeight} />
+              <ResponsiveContainer width="100%" height={chartHeight}><BarChart data={adData}><XAxis dataKey="campaign" fontSize={12} /><YAxis fontSize={12} /><Tooltip /><Bar dataKey="roas" fill="#F6BD16" /></BarChart></ResponsiveContainer>
             </Card>
           )}
-          {(isSentiment || isWeekly) && (
+          {showSentiment && (
             <Row gutter={16} style={{ marginBottom: 16 }}>
-              <Col xs={24} lg={12}><Card size="small" title={`正面舆情 ${d.sent_pos}%`}><Gauge percent={d.sent_pos / 100} height={chartHeight} /></Card></Col>
-              <Col xs={24} lg={12}><Card size="small" title="评分分布"><Bar data={[
+              <Col xs={24} lg={12}><Card size="small" title={`正面舆情 ${d.sent_pos}%`}><ResponsiveContainer width="100%" height={chartHeight}><PieChart><Pie data={[{name:'正面',value:d.sent_pos},{name:'中性',value:d.sent_neu},{name:'负面',value:d.sent_neg}]} dataKey="value" innerRadius={60} outerRadius={100}>{[<Cell key={0} fill="#5AD8A6" />,<Cell key={1} fill="#F6BD16" />,<Cell key={2} fill="#E8684A" />]}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer></Card></Col>
+              <Col xs={24} lg={12}><Card size="small" title="评分分布"><ResponsiveContainer width="100%" height={chartHeight}><BarChart data={[
                 { rating: '5星', pct: d.rating[0] }, { rating: '4星', pct: d.rating[1] },
-                { rating: '3星', pct: d.rating[2] }, { rating: '2星', pct: d.rating[3] },
-                { rating: '1星', pct: d.rating[4] },
-              ]} xField="rating" yField="pct" height={chartHeight} /></Card></Col>
+                { rating: '3星', pct: d.rating[2] }, { rating: '2星', pct: d.rating[3] }, { rating: '1星', pct: d.rating[4] },
+              ]}><XAxis dataKey="rating" fontSize={12} /><YAxis fontSize={12} /><Tooltip /><Bar dataKey="pct" fill="#5AD8A6" /></BarChart></ResponsiveContainer></Card></Col>
             </Row>
           )}
-          <Card style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 14, lineHeight: 2 }}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{report}</ReactMarkdown>
-            </div>
-          </Card>
-          {actions.length > 0 && (
-            <Card style={{ marginTop: 16 }} title="📋 行动建议">
-              <ul style={{ margin: 0, paddingLeft: 20 }}>{actions.map((a, i) => <li key={i} style={{ marginBottom: 4 }}>{a}</li>)}</ul>
-            </Card>
-          )}
+          <Card style={{ marginTop: 16 }}><div style={{ fontSize: 14, lineHeight: 2 }}><ReactMarkdown remarkPlugins={[remarkGfm]}>{report}</ReactMarkdown></div></Card>
+          {actions.length > 0 && (<Card style={{ marginTop: 16 }} title="📋 行动建议"><ul style={{ margin: 0, paddingLeft: 20 }}>{actions.map((a, i) => <li key={i} style={{ marginBottom: 4 }}>{a}</li>)}</ul></Card>)}
         </div>
       )}
     </div>
