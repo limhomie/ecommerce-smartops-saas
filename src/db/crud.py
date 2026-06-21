@@ -168,10 +168,13 @@ class Database:
         }
 
     def disable_user(self, user_id: str) -> bool:
-        """Disable a user by removing their API key."""
+        """Disable a user by invalidating their API key."""
         with self._lock:
             with self._connect() as conn:
-                conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+                conn.execute(
+                    "UPDATE users SET api_key = 'disabled:' || api_key WHERE id = ?",
+                    (user_id,),
+                )
                 return conn.total_changes > 0
 
     def get_system_stats(self) -> dict:
