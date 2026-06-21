@@ -22,7 +22,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <AntLayout style={{ minHeight: '100vh' }}>
       <Sider width={200} style={{ background: '#fff', borderRight: '1px solid #f0f0f0' }}>
         <div style={{ padding: '20px 16px' }}>
-          <Text strong style={{ fontSize: 15 }}>SmartOps Agent</Text>
+          <Text strong style={{ fontSize: 15 }}>电商智能运营</Text>
         </div>
         <Menu mode="inline" selectedKeys={[selected]} items={items}
           onClick={({ key }) => nav(key)}
