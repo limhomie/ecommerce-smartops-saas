@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Button, Typography, Statistic, Row, Col, Space, Table, Tag, message } from 'antd'
+import { Card, Button, Typography, Statistic, Row, Col, Space, Table, message } from 'antd'
 import { SyncOutlined, ReloadOutlined } from '@ant-design/icons'
 import client from '../api/client'
 
