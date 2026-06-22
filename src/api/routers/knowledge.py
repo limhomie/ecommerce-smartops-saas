@@ -99,6 +99,35 @@ async def search_knowledge_get(
     return {"docs": results, "count": len(results)}
 
 
+# ── Document Sync ──
+
+@router.get("/api/knowledge/sync/status")
+async def sync_status():
+    """Return the document registry status."""
+    import json
+    from pathlib import Path
+    reg = Path("data/doc_registry.json")
+    if reg.exists():
+        data = json.loads(reg.read_text(encoding="utf-8"))
+        return {"registry_entries": len(data)}
+    return {"registry_entries": 0}
+
+
+@router.post("/api/knowledge/sync")
+async def trigger_sync():
+    """Trigger a document sync and return results."""
+    from config.settings import Settings
+    from src.memory.long_term import LongTermMemory
+    from src.memory.sync import DocumentSync
+    from src.memory.vector_store import VectorStore
+    s = Settings()
+    store = VectorStore(s)
+    ltm = LongTermMemory(store)
+    syncer = DocumentSync(ltm)
+    result = syncer.sync_directory("data/documents/products", "products")
+    return {"synced": result}
+
+
 # ── Multipart file upload ──
 
 @router.post("/api/knowledge/upload")

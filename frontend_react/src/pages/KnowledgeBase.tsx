@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, Input, Button, Upload, Typography, List, message, Tabs, Statistic, Row, Col, Divider, Select, Space } from 'antd'
 import { SearchOutlined, InboxOutlined } from '@ant-design/icons'
 import client from '../api/client'
@@ -11,6 +11,46 @@ const COLLECTION_LABELS: Record<string, string> = {
   products: '产品信息', competitors: '竞品数据', ads_history: '广告历史',
   policies: '政策FAQ', enterprise_wiki: '企业知识库',
 }
+
+function SyncPanel() {
+  const [syncing, setSyncing] = useState(false)
+  const [result, setResult] = useState<Record<string, number> | null>(null)
+  const [status, setStatus] = useState<{ registry_entries: number } | null>(null)
+
+  const checkStatus = async () => {
+    try { const { data } = await client.get('/knowledge/sync/status'); setStatus(data) } catch { /* */ }
+  }
+  const doSync = async () => {
+    setSyncing(true)
+    try { const { data } = await client.post('/knowledge/sync'); setResult(data.synced); checkStatus() } catch { /* */ }
+    finally { setSyncing(false) }
+  }
+
+  useEffect(() => { checkStatus() }, [])
+
+  return (
+    <div>
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col><Card size="small"><Statistic title="已跟踪文档" value={status?.registry_entries ?? '-'} suffix="个" /></Card></Col>
+      </Row>
+      <Space>
+        <Button type="primary" loading={syncing} onClick={doSync}>立即同步</Button>
+        <Button onClick={checkStatus}>刷新状态</Button>
+      </Space>
+      {result && (
+        <Card title="同步结果" size="small" style={{ marginTop: 16 }}>
+          <Row gutter={16}>
+            <Col span={6}><Statistic title="已创建" value={result.created || 0} valueStyle={{ color: '#3f8600' }} /></Col>
+            <Col span={6}><Statistic title="已更新" value={result.updated || 0} valueStyle={{ color: '#faad14' }} /></Col>
+            <Col span={6}><Statistic title="已删除" value={result.deleted || 0} valueStyle={{ color: '#cf1322' }} /></Col>
+            <Col span={6}><Statistic title="未变化" value={result.unchanged || 0} /></Col>
+          </Row>
+        </Card>
+      )}
+    </div>
+  )
+}
+
 
 export default function KnowledgeBase() {
   // search
@@ -150,6 +190,10 @@ export default function KnowledgeBase() {
           </Col>
         </Row>
       ),
+    },
+    {
+      key: 'sync', label: '🔄 文档同步',
+      children: <SyncPanel />,
     },
   ]
 
