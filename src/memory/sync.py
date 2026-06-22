@@ -17,6 +17,28 @@ def _hash(text: str) -> str:
     return hashlib.md5(text.encode()).hexdigest()[:16]
 
 
+def _process_file(fpath: Path, db: dict, collection: str, stats: dict, ltm: Any, syncer: Any) -> None:
+    """Process one file: check mtime → hash → skip/re-ingest."""
+    key = str(fpath.resolve())
+    old = db.get(key)
+    current_mtime = fpath.stat().st_mtime
+    if old and old.get("mtime") == current_mtime and old.get("hash"):
+        stats["unchanged"] += 1
+        return
+    content = fpath.read_text(encoding="utf-8")
+    h = _hash(content)
+    if old and old["hash"] == h:
+        db[key]["mtime"] = current_mtime
+        stats["unchanged"] += 1
+        return
+    if old:
+        syncer._delete_by_doc_id(key, collection)
+    meta = {"source_doc_id": key, "filename": fpath.name, "content_hash": h}
+    ltm.store.add_documents(collection, [content], [meta])
+    db[key] = {"hash": h, "mtime": current_mtime, "filename": fpath.name}
+    stats["updated" if old else "created"] += 1
+
+
 class DocumentSync:
     """Tracks files and syncs them to a ChromaDB collection in batches."""
 
@@ -86,6 +108,20 @@ class DocumentSync:
 
         self._save()
         logger.info("sync_done", **stats)
+        return stats
+
+    def sync_file(self, file_path: str, collection: str) -> dict:
+        """Sync a single file. Returns {created/updated/deleted/unchanged: 1}."""
+        stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
+        d = Path(file_path)
+        if not d.exists():
+            key = str(d.resolve())
+            self._delete_by_doc_id(key, collection)
+            self._db.pop(key, None)
+            self._save()
+            return {"deleted": 1}
+        _process_file(d, self._db, collection, stats, self.ltm, self)
+        self._save()
         return stats
 
     def _delete_by_doc_id(self, doc_id: str, collection: str) -> None:
