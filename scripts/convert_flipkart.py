@@ -1,4 +1,8 @@
-"""Convert Flipkart dataset to knowledge base documents."""
+"""Convert Flipkart dataset to knowledge base documents.
+
+Generates merged files: N products per file (default 50) to reduce
+ChromaDB embedding calls.  5000 products → 100 files.
+"""
 
 import json
 import os
@@ -12,6 +16,7 @@ SRC = Path(
                         "flipkart_fashion_products_dataset.json")))
 OUT = Path(os.environ.get("FLIPKART_OUT", "data/documents/products"))
 MAX_PRODUCTS = int(os.environ.get("PRODUCT_COUNT", "5000"))
+PER_FILE = 50  # products per merged file
 
 
 def main() -> int:
@@ -19,27 +24,26 @@ def main() -> int:
         products = json.load(f)
 
     OUT.mkdir(parents=True, exist_ok=True)
-
-    # Clear old generated files
     for old in OUT.glob("prod_*.md"):
         old.unlink()
 
-    count = 0
-    for i, p in enumerate(products):
-        if i >= MAX_PRODUCTS:
-            break
-        content = (
-            f"# {p.get('product_name', 'Product')}\n\n"
-            f"- Price: INR {p.get('selling_price', 'N/A')}\n"
-            f"- Brand: {p.get('brand_name', 'N/A')}\n"
-            f"- Category: {p.get('product_category_tree', 'N/A')}\n"
-            f"- Description: {p.get('description', 'N/A')}\n"
-            f"- Rating: {p.get('product_rating', 'N/A')}\n"
-        )
-        (OUT / f"prod_{i:06d}.md").write_text(content, encoding="utf-8")
-        count += 1
+    # Batch into merged files
+    file_count = 0
+    for batch_start in range(0, min(len(products), MAX_PRODUCTS), PER_FILE):
+        batch = products[batch_start:batch_start + PER_FILE]
+        lines: list[str] = []
+        for i, p in enumerate(batch):
+            lines.append(f"## {p.get('product_name', 'Product')}\n")
+            lines.append(f"- Price: INR {p.get('selling_price', 'N/A')}\n")
+            lines.append(f"- Brand: {p.get('brand_name', 'N/A')}\n")
+            lines.append(f"- Category: {p.get('product_category_tree', 'N/A')}\n")
+            lines.append(f"- Description: {p.get('description', 'N/A')}\n")
+            lines.append(f"- Rating: {p.get('product_rating', 'N/A')}\n")
+        fname = f"batch_{batch_start // PER_FILE:04d}.md"
+        (OUT / fname).write_text("".join(lines), encoding="utf-8")
+        file_count += 1
 
-    print(f"Converted {count} products to {OUT}")
+    print(f"Converted {file_count} files ({PER_FILE} products each) to {OUT}")
     return 0
 
 
