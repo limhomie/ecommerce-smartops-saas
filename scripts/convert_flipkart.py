@@ -24,7 +24,7 @@ def main() -> int:
         products = json.load(f)
 
     OUT.mkdir(parents=True, exist_ok=True)
-    for old in OUT.glob("prod_*.md"):
+    for old in list(OUT.glob("prod_*.md")) + list(OUT.glob("batch_*.md")):
         old.unlink()
 
     # Batch into merged files
