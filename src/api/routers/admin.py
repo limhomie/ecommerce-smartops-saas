@@ -69,7 +69,7 @@ async def sync_status():
 import threading
 _sync_results: dict[str, dict] = {}
 
-@router.post("/api/admin/sync")
+@router.get("/api/admin/sync")
 async def trigger_sync():
     import uuid
     job_id = str(uuid.uuid4())

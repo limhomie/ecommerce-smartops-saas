@@ -30,7 +30,7 @@ export default function Admin() {
   const doSync = async () => {
     setSyncing(true); setResult(null)
     try {
-      const { data } = await client.post('/admin/sync')
+      const { data } = await client.get('/admin/sync')
       const jobId = data.job_id
       const poll = async (): Promise<void> => {
         const { data: st } = await client.get(`/admin/sync/status/${jobId}`)
