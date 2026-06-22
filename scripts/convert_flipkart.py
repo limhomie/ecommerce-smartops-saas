@@ -5,9 +5,12 @@ import os
 import sys
 from pathlib import Path
 
-SRC = (Path("data/flipkart-fasion-products-dataset/versions/3/"
-       "flipkart_fashion_products_dataset.json"))
-OUT = Path("data/documents/products")
+SRC = Path(
+    os.environ.get("FLIPKART_SRC",
+                    str(Path.home() / ".cache/kagglehub/datasets/aaditshukla/"
+                        "flipkart-fasion-products-dataset/versions/3/"
+                        "flipkart_fashion_products_dataset.json")))
+OUT = Path(os.environ.get("FLIPKART_OUT", "data/documents/products"))
 MAX_PRODUCTS = int(os.environ.get("PRODUCT_COUNT", "5000"))
 
 
