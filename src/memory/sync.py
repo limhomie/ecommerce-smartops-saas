@@ -35,25 +35,27 @@ class DocumentSync:
 
         # Collect changed files (skip unchanged)
         changed: list[tuple[Path, str, str]] = []  # (path, content, hash)
-        for fpath in sorted(d.rglob("*.md")):
-            key = str(fpath.resolve())
-            old = self._db.get(key)
-            content = fpath.read_text(encoding="utf-8")
-            h = _hash(content)
-            if old and old["hash"] == h:
-                stats["unchanged"] += 1
-                continue
-            changed.append((fpath, content, h))
+        def _process(ext: str) -> None:
+            for fpath in sorted(d.rglob(ext)):
+                key = str(fpath.resolve())
+                old = self._db.get(key)
+                current_mtime = fpath.stat().st_mtime
+                # mtime screening: skip unchanged files without reading content
+                if old and old.get("mtime") == current_mtime and old.get("hash"):
+                    stats["unchanged"] += 1
+                    continue
+                # mtime changed → read + compute hash to confirm
+                content = fpath.read_text(encoding="utf-8")
+                h = _hash(content)
+                if old and old["hash"] == h:
+                    # mtime changed but content hasn't (e.g. `touch` cmd)
+                    self._db[key]["mtime"] = current_mtime
+                    stats["unchanged"] += 1
+                    continue
+                changed.append((fpath, content, h))
 
-        for fpath in sorted(d.rglob("*.txt")):
-            key = str(fpath.resolve())
-            old = self._db.get(key)
-            content = fpath.read_text(encoding="utf-8")
-            h = _hash(content)
-            if old and old["hash"] == h:
-                stats["unchanged"] += 1
-                continue
-            changed.append((fpath, content, h))
+        _process("*.md")
+        _process("*.txt")
 
         # Batch ingest changed files
         for i in range(0, len(changed), BATCH_SIZE):
