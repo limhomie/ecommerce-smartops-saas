@@ -69,8 +69,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.memory_manager = MemoryManager.create_default()
         logger.info("memory_fallback_in_memory")
 
-    # Auto-ingest seed documents
-    _ingest_seed_docs(app, settings, logger)
+    # Auto-ingest seed documents (disabled — use admin sync panel instead)
+    # _ingest_seed_docs(app, settings, logger)
 
     yield
 
