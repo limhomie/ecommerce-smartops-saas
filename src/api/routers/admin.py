@@ -66,15 +66,34 @@ async def sync_status():
     return {"entries": entries}
 
 
+import threading
+_sync_results: dict[str, dict] = {}
+
 @router.post("/api/admin/sync")
 async def trigger_sync():
-    from config.settings import Settings
-    from src.memory.long_term import LongTermMemory
-    from src.memory.sync import DocumentSync
-    from src.memory.vector_store import VectorStore
-    s = Settings()
-    store = VectorStore(s)
-    ltm = LongTermMemory(store)
-    syncer = DocumentSync(ltm)
-    result = syncer.sync_directory("data/documents/products", "products")
-    return {"synced": result}
+    import uuid
+    job_id = str(uuid.uuid4())
+    _sync_results[job_id] = {"status": "running", "result": None}
+
+    def _run():
+        from config.settings import Settings
+        from src.memory.long_term import LongTermMemory
+        from src.memory.sync import DocumentSync
+        from src.memory.vector_store import VectorStore
+        s = Settings()
+        store = VectorStore(s)
+        ltm = LongTermMemory(store)
+        syncer = DocumentSync(ltm)
+        result = syncer.sync_directory("data/documents/products", "products")
+        _sync_results[job_id] = {"status": "done", "result": result}
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job_id": job_id, "status": "running"}
+
+
+@router.get("/api/admin/sync/status/{job_id}")
+async def sync_job_status(job_id: str):
+    job = _sync_results.get(job_id)
+    if not job:
+        return {"status": "not_found"}
+    return job

@@ -28,9 +28,19 @@ export default function Admin() {
   }
 
   const doSync = async () => {
-    setSyncing(true)
-    try { const { data } = await client.post('/admin/sync'); setResult(data.synced); loadStatus() } catch { message.error('Sync failed') }
-    finally { setSyncing(false) }
+    setSyncing(true); setResult(null)
+    try {
+      const { data } = await client.post('/admin/sync')
+      const jobId = data.job_id
+      const poll = async (): Promise<void> => {
+        const { data: st } = await client.get(`/admin/sync/status/${jobId}`)
+        if (st.status === 'done') { setResult(st.result); setSyncing(false); loadStatus(); return }
+        if (st.status === 'not_found') throw new Error('job lost')
+        await new Promise(r => setTimeout(r, 2000))
+        return poll()
+      }
+      await poll()
+    } catch { message.error('Sync failed'); setSyncing(false) }
   }
 
   useEffect(() => { loadStatus() }, [])
