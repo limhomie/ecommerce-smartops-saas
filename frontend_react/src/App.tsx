@@ -6,6 +6,7 @@ import Chat from './pages/Chat'
 import ContentFactory from './pages/ContentFactory'
 import KnowledgeBase from './pages/KnowledgeBase'
 import Reports from './pages/Reports'
+import Admin from './pages/Admin'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const key = localStorage.getItem('api_key')
@@ -30,6 +31,7 @@ export default function App() {
                   <Route path="/content" element={<ContentFactory />} />
                   <Route path="/knowledge" element={<KnowledgeBase />} />
                   <Route path="/reports" element={<Reports />} />
+                  <Route path="/admin" element={<Admin />} />
                 </Routes>
               </Layout>
             </AuthGuard>

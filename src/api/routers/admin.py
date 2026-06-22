@@ -55,3 +55,26 @@ async def system_stats(request: Request):
         return err
     db = request.app.state.db
     return {"stats": db.get_system_stats()}
+
+
+@router.get("/api/admin/sync/status")
+async def sync_status():
+    import json
+    from pathlib import Path
+    reg = Path("data/doc_registry.json")
+    entries = len(json.loads(reg.read_text(encoding="utf-8"))) if reg.exists() else 0
+    return {"entries": entries}
+
+
+@router.post("/api/admin/sync")
+async def trigger_sync():
+    from config.settings import Settings
+    from src.memory.long_term import LongTermMemory
+    from src.memory.sync import DocumentSync
+    from src.memory.vector_store import VectorStore
+    s = Settings()
+    store = VectorStore(s)
+    ltm = LongTermMemory(store)
+    syncer = DocumentSync(ltm)
+    result = syncer.sync_directory("data/documents/products", "products")
+    return {"synced": result}

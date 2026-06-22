@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Layout as AntLayout, Menu, Typography } from 'antd'
-import { DashboardOutlined, MessageOutlined, EditOutlined, BookOutlined, FileTextOutlined, LogoutOutlined } from '@ant-design/icons'
+import { DashboardOutlined, MessageOutlined, EditOutlined, BookOutlined, FileTextOutlined, LogoutOutlined, SettingOutlined } from '@ant-design/icons'
 
 const { Sider, Content } = AntLayout
 const { Text } = Typography
@@ -11,6 +11,7 @@ const items = [
   { key: '/content', icon: <EditOutlined />, label: '内容工厂' },
   { key: '/knowledge', icon: <BookOutlined />, label: '知识库' },
   { key: '/reports', icon: <FileTextOutlined />, label: '分析报告' },
+  { key: '/admin', icon: <SettingOutlined />, label: '管理后台' },
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {
