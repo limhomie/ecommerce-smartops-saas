@@ -166,4 +166,6 @@ class LongTermMemory:
         if current:
             chunks.append(current)
 
+        # Deduplicate exact matches (e.g. sliding window on repetitive content)
+        chunks = list(dict.fromkeys(chunks))
         return chunks if chunks else [text]

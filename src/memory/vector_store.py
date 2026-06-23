@@ -102,7 +102,8 @@ class VectorStore:
             for i, doc in enumerate(documents):
                 h = hashlib.md5(doc.encode()).hexdigest()[:12]
                 src = metadatas[i].get("source", metadatas[i].get("filename", "")) if metadatas else ""
-                ids.append(f"{src}_{h}" if src else h)
+                prefix = f"{src}_{h}" if src else h
+                ids.append(f"{prefix}_{i}")  # index suffix guarantees uniqueness
         try:
             collection.upsert(documents=documents, metadatas=metadatas or [{}]*len(documents), ids=ids)
         except AttributeError:
