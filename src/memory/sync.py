@@ -34,7 +34,7 @@ def _process_file(fpath: Path, db: dict, collection: str, stats: dict, ltm: Any,
     if old:
         syncer._delete_by_doc_id(key, collection)
     meta = {"source_doc_id": key, "filename": fpath.name, "content_hash": h}
-    ltm.store.add_documents(collection, [content], [meta])
+    ltm.ingest_document(collection, content, meta)
     db[key] = {"hash": h, "mtime": current_mtime, "filename": fpath.name}
     stats["updated" if old else "created"] += 1
 
