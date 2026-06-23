@@ -79,24 +79,20 @@ class DocumentSync:
         _process("*.md")
         _process("*.txt")
 
-        # Batch ingest changed files
+        # Ingest changed files (each goes through _chunk_text)
         for i in range(0, len(changed), BATCH_SIZE):
             batch = changed[i:i + BATCH_SIZE]
-            docs: list[str] = []
-            metadatas: list[dict] = []
             for fpath, content, h in batch:
                 key = str(fpath.resolve())
                 old = self._db.get(key)
                 if old:
                     self._delete_by_doc_id(key, collection)
                 meta = {"source_doc_id": key, "filename": fpath.name, "content_hash": h}
-                docs.append(content)
-                metadatas.append(meta)
+                n = self.ltm.ingest_document(collection, content, meta)
                 mtime = fpath.stat().st_mtime
                 self._db[key] = {"hash": h, "mtime": mtime, "filename": fpath.name}
                 stats["updated" if old else "created"] += 1
-            self.ltm.store.add_documents(collection, docs, metadatas)
-            logger.info("batch_ingested", count=len(docs), collection=collection)
+            logger.info("batch_ingested", count=len(batch), collection=collection)
 
         # Detect deletions
         prefix = str(d.resolve())
